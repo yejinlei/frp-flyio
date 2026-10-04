@@ -1,32 +1,29 @@
-# 使用官方 Alpine 作为基础镜像
-FROM alpine:3.19
+# ---- Build Stage ----
+FROM alpine:3.20 AS builder
 
-# 设置 frp 版本，如需更新请修改此处
-ARG FRP_VERSION=0.61.1
-ARG TARGETARCH=amd64
+ARG FRP_VERSION=0.62.0
 
-# 安装必要工具并下载 frp
-RUN apk add --no-cache wget ca-certificates tzdata \
-    && update-ca-certificates \
-    && wget -O /tmp/frp.tar.gz "https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_${TARGETARCH}.tar.gz" \
-    && tar -zxvf /tmp/frp.tar.gz -C /tmp \
-    && mv /tmp/frp_${FRP_VERSION}_linux_${TARGETARCH}/frps /usr/local/bin/frps \
-    && chmod +x /usr/local/bin/frps \
-    && rm -rf /tmp/frp* \
-    && apk del wget \
-    && adduser -D -H -s /sbin/nologin frp
+RUN apk add --no-cache wget tar && \
+    wget -O /tmp/frp.tar.gz \
+      "https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz" && \
+    tar -zxvf /tmp/frp.tar.gz -C /tmp && \
+    mkdir -p /out/bin && \
+    mv "/tmp/frp_${FRP_VERSION}_linux_amd64/frps" /out/bin/frps
 
-# 复制配置文件
-COPY frps.toml /etc/frp/frps.toml
+# ---- Runtime Stage ----
+FROM alpine:3.20
 
-# 切换到非 root 用户运行（安全最佳实践）
+RUN apk add --no-cache ca-certificates gettext libintl tini && \
+    addgroup -S frp && adduser -S -G frp -h /app frp
+
+COPY --from=builder /out/bin/frps /usr/local/bin/frps
+COPY frps.toml     /etc/frp/frps.toml.tmpl
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && chown -R frp:frp /etc/frp
+
 USER frp
+WORKDIR /app
 
-# 暴露服务端口
-# 7000 = frp 客户端通信端口
-# 7500 = Web 仪表盘端口
 EXPOSE 7000 7500
 
-# 启动 frps
-ENTRYPOINT ["frps"]
-CMD ["-c", "/etc/frp/frps.toml"]
+ENTRYPOINT ["/sbin/tini", "--", "/entrypoint.sh"]

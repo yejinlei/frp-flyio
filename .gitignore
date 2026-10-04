@@ -1,10 +1,4 @@
-# frp-flyio .gitignore
-
-# 含有真实密码的本地配置
 frpc.toml
-.env
-
-# 日志文件
 *.log
-
-# flyctl 本地状态（自动生成）
+.env
+.DS_Store

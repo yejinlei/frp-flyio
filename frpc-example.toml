@@ -1,43 +1,39 @@
-# frpc.toml - 客户端配置示例
-# 将此文件复制到本地机器，修改后重命名为 frpc.toml 使用
+# frpc-example.toml —— 本地客户端配置示例
+# 复制为 frpc.toml，修改下面的占位符后运行：./frpc -c frpc.toml
 
-serverAddr = "你的应用名.fly.dev"   # 替换为你的 fly.io 应用域名
-serverPort = 7000                   # 与 frps 的 bindPort 一致
+serverAddr = "your-app-name.fly.dev"   # 改成你自己的 fly.io 域名
+serverPort = 7000
 
-# --- 身份认证 ---
 auth.method = "token"
-auth.token = "替换为你通过 fly secrets set FRP_AUTH_TOKEN 设置的值"
+auth.token = "把这里替换成你 fly secrets set FRP_AUTH_TOKEN 时设置的相同值"
 
-# --- 日志 ---
-log.level = "info"
+# 日志
 log.to = "./frpc.log"
+log.level = "info"
 log.maxDays = 3
 
-# ============================================
-# 以下是代理配置示例，按需修改/添加
-# ============================================
-
-# --- 示例 1: SSH 远程连接 ---
+# --- 示例 1：穿透本地 SSH（22 → 远端 6022） ---
 [[proxies]]
 name = "ssh"
 type = "tcp"
 localIP = "127.0.0.1"
 localPort = 22
 remotePort = 6022
-# 注意: 6022 端口必须在 fly.toml 中配置 [[services]] 并重新部署后才能使用
+# 注意：使用 remotePort 必须在 fly.toml 中新增对应 [[services]] 块开放该端口
 
-# --- 示例 2: Web 服务 (HTTP) ---
+# --- 示例 2：穿透本地 Web 服务（如本地 3000 端口的开发站） ---
 # [[proxies]]
-# name = "web"
+# name = "web-dev"
 # type = "tcp"
 # localIP = "127.0.0.1"
-# localPort = 8080
-# remotePort = 6080
+# localPort = 3000
+# remotePort = 6300
+# 然后通过 http://your-app-name.fly.dev:6300 访问
 
-# --- 示例 3: 远程桌面 (RDP) ---
+# --- 示例 3：穿透 RDP (Windows 远程桌面，3389 → 远端 6389) ---
 # [[proxies]]
 # name = "rdp"
 # type = "tcp"
 # localIP = "127.0.0.1"
 # localPort = 3389
-# remotePort = 13389
+# remotePort = 6389

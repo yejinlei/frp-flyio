@@ -1,51 +1,56 @@
-# fly.io 应用配置
-# 初次部署请先运行: fly launch (选择不部署)，然后按需要修改此文件，最后 fly deploy
+# fly.toml —— frps 部署配置
+# 初始化时 fly launch 会把 app 字段改成你自己的应用名
 
-app = "frp-server"          # 替换为你的 fly.io 应用名
-primary_region = "hkg"      # 就近选择区域，如 hkg(香港), nrt(东京), sin(新加坡), sjc(美国)
-kill_signal = "SIGINT"
-kill_timeout = "5s"
+app = "frp-flyio"          # 首次 fly launch 时会提示修改，可随便改
+primary_region = "hkg"     # 可选：nrt(东京) / sin(新加坡) / hkg(香港) / sjc(圣何塞) / iad(华盛顿)
 
 [build]
 
 [env]
-  # 设置时区为中国时区
-  TZ = "Asia/Shanghai"
+  # 这里可放非敏感默认值；密钥一定用 fly secrets set 设置
+  FRP_DASHBOARD_USER = "admin"
 
-# --- frp 主通信端口 (7000) ---
-[[services]]
-  protocol = "tcp"
-  internal_port = 7000
-  auto_stop_machines = false   # 保持长连接稳定，不自动停止
+[http_service]
+  internal_port = 7500
+  force_https = true
+  auto_stop_machines = false
   auto_start_machines = true
   min_machines_running = 1
 
-  [[services.ports]]
-    port = 7000
-    # frp 是自定义 TCP 协议，不需要 http/tls handler
-    handlers = []
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/static/"
 
-# --- Web 仪表盘端口 (7500) ---
+# --- frp 控制端口 7000 (TCP) ---
 [[services]]
   protocol = "tcp"
-  internal_port = 7500
+  internal_port = 7000
   auto_stop_machines = false
   auto_start_machines = true
   min_machines_running = 1
 
   [[services.ports]]
-    port = 7500
-    # 仪表盘是 HTTP 界面，建议添加 TLS 加密
-    handlers = ["tls", "http"]
+    port = 7000
 
-# --- 如果你需要额外的 TCP 穿透端口 (如 SSH 6022)，请复制以下模板并取消注释 ---
+  [[services.tcp_checks]]
+    grace_period = "10s"
+    interval = "30s"
+    timeout = "5s"
+
+# --- frp 客户端代理端口示例：SSH 穿透 (TCP 6022) ---
+# 需要新端口时，复制下面这段改 remotePort 数字，再 fly deploy
 # [[services]]
 #   protocol = "tcp"
 #   internal_port = 6022
 #   auto_stop_machines = false
-#   auto_start_machines = true
-#   min_machines_running = 1
 #
 #   [[services.ports]]
 #     port = 6022
-#     handlers = []
+#
+#   [[services.tcp_checks]]
+#     grace_period = "10s"
+#     interval = "30s"
+#     timeout = "5s"
