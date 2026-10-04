@@ -1,0 +1,43 @@
+# frpc.toml - 客户端配置示例
+# 将此文件复制到本地机器，修改后重命名为 frpc.toml 使用
+
+serverAddr = "你的应用名.fly.dev"   # 替换为你的 fly.io 应用域名
+serverPort = 7000                   # 与 frps 的 bindPort 一致
+
+# --- 身份认证 ---
+auth.method = "token"
+auth.token = "替换为你通过 fly secrets set FRP_AUTH_TOKEN 设置的值"
+
+# --- 日志 ---
+log.level = "info"
+log.to = "./frpc.log"
+log.maxDays = 3
+
+# ============================================
+# 以下是代理配置示例，按需修改/添加
+# ============================================
+
+# --- 示例 1: SSH 远程连接 ---
+[[proxies]]
+name = "ssh"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22
+remotePort = 6022
+# 注意: 6022 端口必须在 fly.toml 中配置 [[services]] 并重新部署后才能使用
+
+# --- 示例 2: Web 服务 (HTTP) ---
+# [[proxies]]
+# name = "web"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# remotePort = 6080
+
+# --- 示例 3: 远程桌面 (RDP) ---
+# [[proxies]]
+# name = "rdp"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 3389
+# remotePort = 13389

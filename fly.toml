@@ -1,0 +1,51 @@
+# fly.io 应用配置
+# 初次部署请先运行: fly launch (选择不部署)，然后按需要修改此文件，最后 fly deploy
+
+app = "frp-server"          # 替换为你的 fly.io 应用名
+primary_region = "hkg"      # 就近选择区域，如 hkg(香港), nrt(东京), sin(新加坡), sjc(美国)
+kill_signal = "SIGINT"
+kill_timeout = "5s"
+
+[build]
+
+[env]
+  # 设置时区为中国时区
+  TZ = "Asia/Shanghai"
+
+# --- frp 主通信端口 (7000) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 7000
+  auto_stop_machines = false   # 保持长连接稳定，不自动停止
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 7000
+    # frp 是自定义 TCP 协议，不需要 http/tls handler
+    handlers = []
+
+# --- Web 仪表盘端口 (7500) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 7500
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 7500
+    # 仪表盘是 HTTP 界面，建议添加 TLS 加密
+    handlers = ["tls", "http"]
+
+# --- 如果你需要额外的 TCP 穿透端口 (如 SSH 6022)，请复制以下模板并取消注释 ---
+# [[services]]
+#   protocol = "tcp"
+#   internal_port = 6022
+#   auto_stop_machines = false
+#   auto_start_machines = true
+#   min_machines_running = 1
+#
+#   [[services.ports]]
+#     port = 6022
+#     handlers = []
