@@ -12,7 +12,7 @@ frp-flyio/
 ├── frps.toml              # 主实例配置模板（TCP/HTTP/HTTPS，含 ${...} 占位符）
 ├── frps-udp.toml          # UDP 实例配置模板（绑 fly-global-services）
 ├── fly.toml               # fly.io 平台部署配置（端口、区域、健康检查）
-├── frpc-example.toml      # 本地客户端配置示例（TCPMUX/TCP/HTTP/HTTPS/STCP/SUDP，连 7000）
+├── frpc-example.toml      # 本地客户端配置示例（TCPMUX/TCP/HTTP/HTTPS/STCP/SUDP/XTCP，连 7000）
 ├── frpc-udp-example.toml  # 本地客户端 UDP 配置示例（连 7001）
 ├── deploy.ps1             # Windows 一键发布脚本
 ├── add-port.ps1           # Windows 端口映射脚本（改 fly.toml + allowPorts）
@@ -52,43 +52,49 @@ frp-flyio/
 
 ## 🔢 端口规划
 
-服务端开放 **4 组 × 5 个连续端口**（外部端口 = 容器内部端口，frps 直接监听同名端口）：
+服务端开放 **4 组 × 20 个连续端口**（外部端口 = 容器内部端口，frps 直接监听同名端口）：
 
 | 协议 | 端口 | frpc 用法 | 访问方式 |
 | :--- | :--- | :--- | :--- |
-| TCP | `6000-6004` | `type = "tcp"`，`remotePort = 6000..6004` | `域名:6000` |
-| UDP | `6100-6104` | `type = "udp"`，`remotePort = 6100..6104`（连 7001 实例） | `域名:6100` |
-| HTTP | `8080-8084` | `8080`：`type = "http"` + `customDomains`（按域名路由）<br>`8081-8084`：`type = "tcp"` | `http://域名:8080` |
-| HTTPS | `8443-8447` | `8443`：`type = "https"` + `customDomains`（按域名路由）<br>`8444-8447`：`type = "tcp"` | `https://域名:8443` |
+| TCP | `6000-6019` | `type = "tcp"`，`remotePort = 6000..6019` | `域名:6000` |
+| UDP | `6100-6119` | `type = "udp"`，`remotePort = 6100..6119`（连 7001 实例） | `域名:6100` |
+| HTTP | `8080-8099` | `8080`：`type = "http"` + `customDomains`（按域名路由）<br>`8081-8099`：`type = "tcp"` | `http://域名:8080` |
+| HTTPS | `8443-8462` | `8443`：`type = "https"` + `customDomains`（按域名路由）<br>`8444-8462`：`type = "tcp"` | `https://域名:8443` |
 | TCPMUX | `8333` | `type = "tcpmux"` + `multiplexer = "httpconnect"`（按域名路由） | `curl -x http://域名:8333 https://目标` |
 | STCP / SUDP | 无公网端口 | `type = "stcp"` / `"sudp"` + `secretKey`，访问方配 `[[visitors]]` | 本地 `127.0.0.1:visitor 端口` |
+| XTCP | 无公网端口 | `type = "xtcp"` + `secretKey`，打洞成功后点对点直连 | 本地 `127.0.0.1:visitor 端口` |
+| socks5 插件 | 占 1 个 TCP 端口 | `type = "tcp"` + `[proxies.plugin] type = "socks5"` | `socks5://域名:6002` |
 
-控制端口：`7000` 主实例（TCP / HTTP / HTTPS / TCPMUX / STCP / SUDP）、`7001` UDP 实例，仪表盘在主实例 `7500`（经 `https://应用名.fly.dev` 访问）。
+控制端口：`7000` 主实例（上表除 UDP 外的全部类型）、`7001` UDP 实例，仪表盘在主实例 `7500`（经 `https://应用名.fly.dev` 访问）。
+额外能力：Prometheus 指标 `/metrics`（挂 7500，随仪表盘一起对外）、SSH 隧道网关 `2200`（**仅容器内监听，未对外发布**）。
 
 > `8333` 是 frps 的 `tcpmuxHTTPConnectPort`，像 vhost 一样按域名路由，**不占 `remotePort`**，不受 `allowPorts` 限制。
-> STCP / SUDP 走的是 frpc 已建立的控制连接（7000），**服务端不需要任何额外端口**，改客户端配置即可用。
+> STCP / SUDP / XTCP 走的是 frpc 已建立的控制连接（7000），**服务端不需要任何额外端口**，改客户端配置即可用。
 
 > frps 的 vhost 端口各只能有一个（`vhostHTTPPort` / `vhostHTTPSPort`），
-> 所以每组第 1 个端口给 vhost 做域名路由，其余 4 个作为裸 TCP 端口用 `type = "tcp"` 承载 HTTP/HTTPS 流量。
+> 所以每组第 1 个端口给 vhost 做域名路由，其余 19 个作为裸 TCP 端口用 `type = "tcp"` 承载 HTTP/HTTPS 流量。
 
 ## ✅ 实测状态（当前实例 `frp-tidy-coral-6267`）
 
-2026-10-04 首测，2026-10-05 复测（含新增的 TCPMUX `8333`）：
+2026-10-05 扩容后实测（`frp-tidy-coral-6267`，1 台机器）：
 
 | 项目 | 结果 |
 | :--- | :--- |
-| 应用 / 区域 | `frp-tidy-coral-6267` / `sin`，共享 CPU 1x、256MB |
-| TCP 端口（23 个） | `7000`、`7001`、`8333`、`6000-6004`、`8080-8084`、`8443-8447` 全部可连 |
-| TCPMUX `8333` | 可连 ✅ → frps 的 tcpmux 监听随进程常驻，不需要 frpc 注册 |
-| 访问方式 | `.fly.dev` 域名和专用 IPv4（`66.51.123.39`）**两者都能连** TCP 端口 |
-| `https://域名/healthz` | `200` → 机器 healthy，健康检查通过 |
-| `https://域名/` | `401` → 仪表盘鉴权生效 |
-| `http://域名:8080/` | `404` → frps 的 vhost 路由在响应，确认跑的是新镜像 |
-| UDP `6100-6104` | 边缘已开放；但要 frpc 注册 udp 代理后 frps 才会监听 |
+| 应用 / 区域 | `frp-tidy-coral-6267` / `sin`，共享 CPU 1x、256MB，**机器数 1**（务必=1，见注意事项） |
+| fly 对外服务数 | `83` 条（`flyctl services list`）：TCP 63 + UDP 20 |
+| TCP 端口 | `7000`、`7001`、`8333`、`6000-6019`、`8080-8099`、`8443-8462` 全部可连 |
+| UDP 端口 `6100-6119` | 边缘已发布；frpc 注册 udp 代理后 frps 才监听 |
+| TCPMUX `8333` | 发送 `CONNECT` 得到 `HTTP/1.1 404 Not Found` ✅ → frps 的 tcpmux 监听在按域名路由 |
+| TCP 穿透端到端 | frpc 注册 `6010/6011` → 本机 TCP 连上 ✅（`start proxy success`） |
+| socks5 插件 | 经 `6011` 代理访问 `https://example.com` 返回 `200` ✅ 全链路通 |
+| Prometheus `/metrics` | `401` → frps 对 /metrics 也做鉴权，抓取要带仪表盘 Basic Auth |
+| SSH 隧道网关 `2200` | 容器日志 `sshTunnelGateway listen on port 2200` ✅（未对外发布） |
+| XTCP | 未实测（需要两台不同网络的机器各起一个 frpc） |
 
-> 穿透端口（6000-6004 等）是 **frpc 注册后 frps 才动态监听** 的，
+> 穿透端口是 **frpc 注册后 frps 才动态监听** 的，
 > 没有客户端时用 `nc` 测会「连上即断开」，属正常现象，不是端口没开。
-> 例外：控制端口 `7000` / `7001`、仪表盘 `7500`、TCPMUX `8333` 是 frps 启动时就常驻监听的。
+> 例外：控制端口 `7000` / `7001`、仪表盘 `7500`、TCPMUX `8333` 是 frps 启动时就常驻监听的，
+> 所以它们即使在无客户端时也能连上（可以用来确认服务是否起来了）。
 
 ## 🚀 快速部署
 
@@ -267,10 +273,100 @@ bindPort = 6000             # 本地端口，随便选
 
 然后 `ssh -p 6000 用户名@127.0.0.1`。SUDP 同理，但注意两端 `udpPacketSize` 保持一致（默认 1500）。
 
+### XTCP（点对点直连，不走服务器中转）
+
+STCP 的流量会经 frps 中转，受机器带宽限制；XTCP 先尝试 NAT 打洞，
+成功后两台内网机**直连**，`7000` 只用于「约会」交换双方地址。
+
+```toml
+# 被访问方
+[[proxies]]
+name = "p2p-ssh"
+type = "xtcp"
+secretKey = "换成一串够长的随机串"
+localIP = "127.0.0.1"
+localPort = 22
+```
+
+```toml
+# 访问方（另起一个 frpc）
+[[visitors]]
+name = "p2p-ssh-visitor"
+type = "xtcp"
+serverName = "p2p-ssh"
+secretKey = "与被访问方相同"
+bindAddr = "127.0.0.1"
+bindPort = 6000
+keepTunnelOpen = false      # true = 打洞成功后仍保留中转隧道
+fallbackTo = "secret-ssh"   # 打洞失败时回落到同名 STCP 代理
+fallbackTimeoutMs = 100
+```
+
+> 对称 NAT 通常打不通，建议**同时**按上节配一个 STCP 代理并用 `fallbackTo` 兜底。
+> 服务端无需任何改动（`natholeAnalysisDataReserveHours` 保持默认 168 即可）。
+
+### socks5 插件（一个端口代理所有流量）
+
+插件在 **frpc 本地**实现，服务端只见一个普通 `tcp` 端口；
+
+```toml
+[[proxies]]
+name = "socks5"
+type = "tcp"
+remotePort = 6002          # 仍要落在 allowPorts 范围内
+[proxies.plugin]
+type = "socks5"
+username = "frp-user"      # 可选，不配就是匿名代理
+password = "换成自己的密码"  # 可选
+```
+
+用：`curl -x socks5://frp-user:密码@应用名.fly.dev:6002 https://example.com/`
+
+> 匿名 socks5 暴露在公网等于开放代理，务必配 `username` / `password`。
+
+### Prometheus 监控（`/metrics`）
+
+`frps.toml` 已开 `enablePrometheus = true`，指标挂在仪表盘端口下，不占新端口：
+
+```bash
+# 实测：直接访问返回 401，必须带仪表盘账号
+curl https://应用名.fly.dev/metrics                 # 401
+curl -u admin:密码 https://应用名.fly.dev/metrics   # 200
+```
+
+Prometheus 抓取片段：
+
+```yaml
+scrape_configs:
+  - job_name: frps
+    scheme: https
+    static_configs:
+      - targets: ['应用名.fly.dev:443']
+    basic_auth:            # 若 /metrics 返回 401 才需要
+      username: admin
+      password: <仪表盘密码>
+```
+
+### SSH 隧道网关（2200，仅容器内）
+
+frps 已启用 `sshTunnelGateway.bindPort = 2200`，但**故意不在 `fly.toml` 发布端口**：
+`authorizedKeysFile` 为空时网关对 SSH 客户端不做任何鉴权，公网开放等于任何人都能管理你的代理。
+
+要用就走本地隧道（不暴露公网）：
+
+```powershell
+flyctl proxy 2200:2200 -a frp-tidy-coral-6267   # 窗口 1
+ssh -p 2200 localhost                            # 窗口 2
+```
+
+私钥自动生成在容器内 `/tmp/.autogen_ssh_key`（重启会变，属正常）。
+确需公网开放：先在 `frps.toml` 配好 `sshTunnelGateway.authorizedKeysFile`（镜像里放你的公钥），
+再在 `fly.toml` 加 `2200` 的 `[[services]]` 块。
+
 ### ⚠️ 新增端口必须做的事
 
 现在服务端只放行白名单端口（`frps.toml` / `frps-udp.toml` 里的 `allowPorts`）：
-TCP `6000-6004`、UDP `6100-6104`、HTTP `8081-8084`、HTTPS `8444-8447`。
+TCP `6000-6019`、UDP `6100-6119`、HTTP `8081-8099`、HTTPS `8444-8462`。
 要新增端口必须**同时改三处**，否则连不上：
 
 1. `fly.toml`：加一个 `[[services]]` 块（外部端口和 `internal_port` 保持一致）；
@@ -278,7 +374,7 @@ TCP `6000-6004`、UDP `6100-6104`、HTTP `8081-8084`、HTTPS `8444-8447`。
 3. `fly deploy` 重新部署。
 
 > 注意 `8080` / `8443` 已被 vhost 占用、`8333` 已被 tcpmux 占用，都不能再当 `remotePort` 用。
-> TCPMUX、STCP、SUDP 例外：它们不走 `allowPorts`，不需要加白名单。
+> TCPMUX、STCP、SUDP、XTCP 例外：它们不走 `allowPorts`，不需要加白名单。
 
 ## 🔧 常用运维命令
 
@@ -305,3 +401,14 @@ TCP `6000-6004`、UDP `6100-6104`、HTTP `8081-8084`、HTTPS `8444-8447`。
 - **UDP 包大小**：fly.io 隧道会占用几十字节，UDP 单包建议 ≤ 1300 字节，必要时调小本端 MTU。
 - **安全**：务必使用强 Token 和仪表盘密码，不要使用 123456 等弱口令。
 - **密钥轮换**：如怀疑泄露，执行 `fly secrets set FRP_AUTH_TOKEN="新值"` 后客户端同步更新即可。
+- **⚠️ 机器数必须保持 1**：frps 是有状态的——`frpc` 只在它连上的那台机器上注册穿透端口，
+  而 fly 边缘会把新连接随机分给任意一台健康机器，**跑 2 台会导致穿透时好时坏**（且双倍计费）。
+  2026-10-05 排查时发现该应用跑着 2 台，已收缩：
+
+  ```powershell
+  flyctl status                # Machines 列表里有几台？
+  flyctl scale count 1 --yes   # 多于 1 台时执行
+  ```
+
+- **xtcp 成功率**：点对点打洞失败时会走服务器中转（需 `fallbackTo` + 同名 STCP 代理兜底），
+  对称 NAT 环境下通常打不通，按上面的 STCP 用法保留兜底最稳。

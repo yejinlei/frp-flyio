@@ -1,4 +1,4 @@
-# frps.toml 模板 —— 主实例（TCP / HTTP / HTTPS）
+# frps.toml 模板 —— 主实例（TCP / HTTP / HTTPS / TCPMUX / STCP / SUDP / XTCP）
 # 启动时由 entrypoint.sh 通过 envsubst 注入环境变量
 # 不要把真实密码写在这里；通过 fly secrets set 注入。
 
@@ -20,7 +20,7 @@ webServer.password = "${FRP_DASHBOARD_PWD}"
 
 # --- HTTP / HTTPS 虚拟主机端口 ---
 # frpc 里 type = "http" 走 vhostHTTPPort，type = "https" 走 vhostHTTPSPort，
-# frps 各只支持一个 vhost 端口，所以 8081-8084 / 8444-8447 用 type = "tcp" 承载。
+# frps 各只支持一个 vhost 端口，所以 8081-8099 / 8444-8462 用 type = "tcp" 承载。
 vhostHTTPPort = 8080
 vhostHTTPSPort = 8443
 
@@ -32,10 +32,24 @@ tcpmuxHTTPConnectPort = 8333
 
 # --- 端口白名单：只允许客户端占用下面这些端口 ---
 allowPorts = [
-  { start = 6000, end = 6004 },   # TCP 穿透 6000-6004
-  { start = 8081, end = 8084 },   # HTTP 穿透（8080 已被 vhost 占用）
-  { start = 8444, end = 8447 },   # HTTPS 穿透（8443 已被 vhost 占用）
+  { start = 6000, end = 6019 },   # TCP 穿透 6000-6019
+  { start = 8081, end = 8099 },   # HTTP 穿透（8080 已被 vhost 占用）
+  { start = 8444, end = 8462 },   # HTTPS 穿透（8443 已被 vhost 占用）
 ]
+
+# --- Prometheus 监控指标 ---
+# 挂在仪表盘端口下（https://域名/metrics），不需要额外端口。
+enablePrometheus = true
+
+# --- SSH 隧道网关 ---
+# 只在容器内监听 2200，故意不在 fly.toml 发布端口：authorizedKeysFile 为空时
+# 网关对客户端不做任何鉴权，公网开放等于裸奔。要用就走本地隧道：flyctl proxy 2200:2200。
+sshTunnelGateway.bindPort = 2200
+sshTunnelGateway.autoGenPrivateKeyPath = "/tmp/.autogen_ssh_key"
+
+# --- XTCP（点对点打洞）---
+# 不需要任何服务端端口：visitor 走 7000 控制连接做「约会」(rendezvous)，
+# 由 frps 交换双方的外网地址；打洞策略数据默认保留 168 小时。
 
 # --- 日志 ---
 log.to = "console"

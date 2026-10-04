@@ -1,13 +1,13 @@
 # frpc-example.toml —— 本地客户端配置示例（TCP / HTTP / HTTPS）
 # 复制为 frpc.toml，修改下面的占位符后运行：./frpc -c frpc.toml
 #
-# 服务端可用端口（每组 5 个连续端口）：
-#   TCP   6000-6004   type = "tcp"
-#   HTTP  8080-8084   8080 用 type = "http"（按域名路由），8081-8084 用 type = "tcp"
-#   HTTPS 8443-8447   8443 用 type = "https"（按域名路由），8444-8447 用 type = "tcp"
+# 服务端可用端口（2026-10-05 扩容为每组 20 个连续端口）：
+#   TCP   6000-6019   type = "tcp"
+#   HTTP  8080-8099   8080 用 type = "http"（按域名路由），8081-8099 用 type = "tcp"
+#   HTTPS 8443-8462   8443 用 type = "https"（按域名路由），8444-8462 用 type = "tcp"
 #   TCPMUX 8333    type = "tcpmux" + multiplexer = "httpconnect"（按域名路由）
 #
-# 另外不需要服务端改配置、纯客户端可用的：STCP / SUDP（配 visitor 即可）。
+# 另外不需要服务端改配置、纯客户端可用的：STCP / SUDP / XTCP（配 visitor 即可）。
 
 serverAddr = "your-app-name.fly.dev"   # 改成你自己的 fly.io 域名
 serverPort = 7000
@@ -115,3 +115,37 @@ remotePort = 8081
 # bindAddr = "127.0.0.1"
 # bindPort = 6000        # 本地端口，随便选，不占用服务端端口
 # 连接：ssh -p 6000 用户名@127.0.0.1
+
+# --- 示例 11：XTCP（点对点直连，成功打洞后流量不再经服务器中转）---
+# 不需要服务端端口：visitor 与控制连接（7000）会合交换双方外网地址。
+# 被访问方：
+# [[proxies]]
+# name = "p2p-ssh"
+# type = "xtcp"
+# secretKey = "换成一串够长的随机串"
+# localIP = "127.0.0.1"
+# localPort = 22
+#
+# 访问方（另起一个 frpc 进程）：
+# [[visitors]]
+# name = "p2p-ssh-visitor"
+# type = "xtcp"
+# serverName = "p2p-ssh"
+# secretKey = "与被访问方相同"
+# bindAddr = "127.0.0.1"
+# bindPort = 6000
+# keepTunnelOpen = false      # true = 打洞成功后仍保留中转隧道
+# fallbackTo = "secret-ssh"   # 打洞失败时回落到示例 9 的 STCP 代理
+# fallbackTimeoutMs = 100
+# 连接：ssh -p 6000 用户名@127.0.0.1
+
+# --- 示例 12：socks5 插件（服务端只见 1 个 tcp 端口，实际可由多个目标共享）---
+# [[proxies]]
+# name = "socks5"
+# type = "tcp"
+# remotePort = 6002
+# [proxies.plugin]
+# type = "socks5"
+# username = "frp-user"        # 可选，不配就是匿名代理
+# password = "换成自己的密码"    # 可选
+# 使用：任意程序把代理设为 socks5://域名:6002，或 curl -x socks5://frp-user:密码@域名:6002 url

@@ -1,17 +1,19 @@
-# fly.toml app configuration file generated for frp-tidy-coral-6267 on 2026-10-04T14:26:35+08:00
+# fly.toml app configuration file generated for frp-tidy-coral-6267
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
-# 端口规划（每组 5 个连续端口，外部端口 = 容器内部端口，frps 直接监听同名端口）：
-#   TCP   穿透 6000-6004  → frpc type = "tcp",   remotePort = 6000..6004
-#   UDP   穿透 6100-6104  → frpc type = "udp",   remotePort = 6100..6104（需独立 IPv4）
-#   HTTP  穿透 8080-8084  → 8080 = vhostHTTPPort（type="http"，按域名路由）
-#                           8081-8084 = 裸 TCP（type="tcp"，http://域名:8081）
-#   HTTPS 穿透 8443-8447  → 8443 = vhostHTTPSPort（type="https"，按域名路由）
-#                           8444-8447 = 裸 TCP（type="tcp"，https://域名:8444）
-#   TCPMUX 穿透 8333  → frpc type = "tcpmux", multiplexer = "httpconnect"，
-#                       按 customDomains 路由，不占 remotePort
-#   控制端口 7000 = 主实例（tcp/http/https/tcpmux/stcp/sudp），7001 = UDP 实例
+# 端口规划（2026-10-05 扩容为每组 20 个连续端口，外部端口 = 容器内部端口，frps 直接监听同名端口）：
+#   TCP    6000-6019  -> frpc type = "tcp",   remotePort = 6000..6019
+#   UDP    6100-6119  -> frpc type = "udp",   remotePort = 6100..6119（连 7001 实例，需独立 IPv4）
+#   HTTP   8080-8099  -> 8080 = vhostHTTPPort（type = "http"，按域名路由）
+#                        8081-8099 = 裸 TCP（type = "tcp"，http://域名:8081）
+#   HTTPS  8443-8462  -> 8443 = vhostHTTPSPort（type = "https"，按域名路由）
+#                        8444-8462 = 裸 TCP（type = "tcp"，https://域名:8444）
+#   TCPMUX 8333       -> type = "tcpmux" + multiplexer = "httpconnect"（按域名路由，不占 remotePort）
+#   控制端口 7000 = 主实例（tcp / http / https / tcpmux / stcp / sudp / xtcp），7001 = UDP 实例
+#
+# frps 的 sshTunnelGateway(2200) 只在容器内监听，故意不在 fly.toml 发布（避免公网无鉴权暴露，
+# 见 README「SSH 隧道网关」一节）；要用时执行 flyctl proxy 2200:2200。
 #
 # ⚠️ UDP 需要独立 IPv4（共享 IPv4 / IPv6 不支持 UDP）：fly ips allocate-v4
 
@@ -22,7 +24,7 @@ primary_region = 'sin'
 [env]
   FRP_DASHBOARD_USER = 'admin'
 
-# 80/443 → frps 仪表盘（webServer.port = 7500）
+# 80/443 -> frps 仪表盘（webServer.port = 7500）
 [http_service]
   internal_port = 7500
   force_https = true
@@ -39,8 +41,8 @@ primary_region = 'sin'
     path = '/healthz'
 
 # ============================ 控制端口 ============================
+# frps 主实例（TCP / HTTP / HTTPS / TCPMUX / STCP / SUDP / XTCP）
 
-# frps 主实例（TCP / HTTP / HTTPS 代理）
 [[services]]
   protocol = 'tcp'
   internal_port = 7000
@@ -57,6 +59,7 @@ primary_region = 'sin'
     grace_period = '10s'
 
 # frps UDP 实例（UDP 专用，代理绑 fly-global-services）
+
 [[services]]
   protocol = 'tcp'
   internal_port = 7001
@@ -72,161 +75,502 @@ primary_region = 'sin'
     timeout = '5s'
     grace_period = '10s'
 
-# ============================ TCP 穿透 6000-6004 ============================
+# ============================ TCP 穿透 6000-6019 ============================
 
 [[services]]
   protocol = 'tcp'
   internal_port = 6000
-
   [[services.ports]]
     port = 6000
 
 [[services]]
   protocol = 'tcp'
   internal_port = 6001
-
   [[services.ports]]
     port = 6001
 
 [[services]]
   protocol = 'tcp'
   internal_port = 6002
-
   [[services.ports]]
     port = 6002
 
 [[services]]
   protocol = 'tcp'
   internal_port = 6003
-
   [[services.ports]]
     port = 6003
 
 [[services]]
   protocol = 'tcp'
   internal_port = 6004
-
   [[services.ports]]
     port = 6004
 
-# ============================ UDP 穿透 6100-6104 ============================
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6005
+  [[services.ports]]
+    port = 6005
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6006
+  [[services.ports]]
+    port = 6006
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6007
+  [[services.ports]]
+    port = 6007
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6008
+  [[services.ports]]
+    port = 6008
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6009
+  [[services.ports]]
+    port = 6009
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6010
+  [[services.ports]]
+    port = 6010
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6011
+  [[services.ports]]
+    port = 6011
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6012
+  [[services.ports]]
+    port = 6012
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6013
+  [[services.ports]]
+    port = 6013
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6014
+  [[services.ports]]
+    port = 6014
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6015
+  [[services.ports]]
+    port = 6015
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6016
+  [[services.ports]]
+    port = 6016
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6017
+  [[services.ports]]
+    port = 6017
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6018
+  [[services.ports]]
+    port = 6018
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6019
+  [[services.ports]]
+    port = 6019
+
+# ============================ UDP 穿透 6100-6119 ============================
 
 [[services]]
   protocol = 'udp'
   internal_port = 6100
-
   [[services.ports]]
     port = 6100
 
 [[services]]
   protocol = 'udp'
   internal_port = 6101
-
   [[services.ports]]
     port = 6101
 
 [[services]]
   protocol = 'udp'
   internal_port = 6102
-
   [[services.ports]]
     port = 6102
 
 [[services]]
   protocol = 'udp'
   internal_port = 6103
-
   [[services.ports]]
     port = 6103
 
 [[services]]
   protocol = 'udp'
   internal_port = 6104
-
   [[services.ports]]
     port = 6104
 
-# ============================ HTTP 穿透 8080-8084 ============================
+[[services]]
+  protocol = 'udp'
+  internal_port = 6105
+  [[services.ports]]
+    port = 6105
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6106
+  [[services.ports]]
+    port = 6106
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6107
+  [[services.ports]]
+    port = 6107
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6108
+  [[services.ports]]
+    port = 6108
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6109
+  [[services.ports]]
+    port = 6109
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6110
+  [[services.ports]]
+    port = 6110
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6111
+  [[services.ports]]
+    port = 6111
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6112
+  [[services.ports]]
+    port = 6112
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6113
+  [[services.ports]]
+    port = 6113
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6114
+  [[services.ports]]
+    port = 6114
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6115
+  [[services.ports]]
+    port = 6115
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6116
+  [[services.ports]]
+    port = 6116
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6117
+  [[services.ports]]
+    port = 6117
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6118
+  [[services.ports]]
+    port = 6118
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6119
+  [[services.ports]]
+    port = 6119
+
+# ============================ HTTP 穿透 8080-8099 ============================
+# 8080 = vhostHTTPPort（type = "http"，按域名路由）
 
 [[services]]
   protocol = 'tcp'
   internal_port = 8080
-
   [[services.ports]]
     port = 8080
 
 [[services]]
   protocol = 'tcp'
   internal_port = 8081
-
   [[services.ports]]
     port = 8081
 
 [[services]]
   protocol = 'tcp'
   internal_port = 8082
-
   [[services.ports]]
     port = 8082
 
 [[services]]
   protocol = 'tcp'
   internal_port = 8083
-
   [[services.ports]]
     port = 8083
 
 [[services]]
   protocol = 'tcp'
   internal_port = 8084
-
   [[services.ports]]
     port = 8084
 
-# ============================ HTTPS 穿透 8443-8447 ============================
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8085
+  [[services.ports]]
+    port = 8085
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8086
+  [[services.ports]]
+    port = 8086
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8087
+  [[services.ports]]
+    port = 8087
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8088
+  [[services.ports]]
+    port = 8088
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8089
+  [[services.ports]]
+    port = 8089
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8090
+  [[services.ports]]
+    port = 8090
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8091
+  [[services.ports]]
+    port = 8091
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8092
+  [[services.ports]]
+    port = 8092
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8093
+  [[services.ports]]
+    port = 8093
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8094
+  [[services.ports]]
+    port = 8094
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8095
+  [[services.ports]]
+    port = 8095
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8096
+  [[services.ports]]
+    port = 8096
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8097
+  [[services.ports]]
+    port = 8097
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8098
+  [[services.ports]]
+    port = 8098
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8099
+  [[services.ports]]
+    port = 8099
+
+# ============================ HTTPS 穿透 8443-8462 ============================
+# 8443 = vhostHTTPSPort（type = "https"，按域名路由）
 
 [[services]]
   protocol = 'tcp'
   internal_port = 8443
-
   [[services.ports]]
     port = 8443
 
 [[services]]
   protocol = 'tcp'
   internal_port = 8444
-
   [[services.ports]]
     port = 8444
 
 [[services]]
   protocol = 'tcp'
   internal_port = 8445
-
   [[services.ports]]
     port = 8445
 
 [[services]]
   protocol = 'tcp'
   internal_port = 8446
-
   [[services.ports]]
     port = 8446
 
 [[services]]
   protocol = 'tcp'
   internal_port = 8447
-
   [[services.ports]]
     port = 8447
 
-# ============================ TCPMUX 穿透 8333 ============================
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8448
+  [[services.ports]]
+    port = 8448
 
-# frps.toml 的 tcpmuxHTTPConnectPort = 8333，frpc 用 type = "tcpmux" + httpconnect
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8449
+  [[services.ports]]
+    port = 8449
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8450
+  [[services.ports]]
+    port = 8450
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8451
+  [[services.ports]]
+    port = 8451
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8452
+  [[services.ports]]
+    port = 8452
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8453
+  [[services.ports]]
+    port = 8453
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8454
+  [[services.ports]]
+    port = 8454
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8455
+  [[services.ports]]
+    port = 8455
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8456
+  [[services.ports]]
+    port = 8456
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8457
+  [[services.ports]]
+    port = 8457
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8458
+  [[services.ports]]
+    port = 8458
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8459
+  [[services.ports]]
+    port = 8459
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8460
+  [[services.ports]]
+    port = 8460
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8461
+  [[services.ports]]
+    port = 8461
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8462
+  [[services.ports]]
+    port = 8462
+
+# ============================ TCPMUX 穿透 8333 ============================
+# frps.toml 的 tcpmuxHTTPConnectPort，type = "tcpmux" + httpconnect
+
 [[services]]
   protocol = 'tcp'
   internal_port = 8333
-
   [[services.ports]]
     port = 8333
 
@@ -235,3 +579,4 @@ primary_region = 'sin'
   cpu_kind = 'shared'
   cpus = 1
   memory_mb = 256
+
