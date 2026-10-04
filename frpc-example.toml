@@ -1,5 +1,11 @@
-# frpc-example.toml —— 本地客户端配置示例
+# frpc-example.toml —— 本地客户端配置示例（TCP / HTTP / HTTPS）
 # 复制为 frpc.toml，修改下面的占位符后运行：./frpc -c frpc.toml
+#
+# 服务端可用端口（每组 5 个连续端口）：
+#   TCP   6000-6004   type = "tcp"
+#   HTTP  8080-8084   8080 用 type = "http"（按域名路由），8081-8084 用 type = "tcp"
+#   HTTPS 8443-8447   8443 用 type = "https"（按域名路由），8444-8447 用 type = "tcp"
+#   UDP   6100-6104   见 frpc-udp-example.toml（必须连 7001 端口的另一个 frps 实例）
 
 serverAddr = "your-app-name.fly.dev"   # 改成你自己的 fly.io 域名
 serverPort = 7000
@@ -12,28 +18,65 @@ log.to = "./frpc.log"
 log.level = "info"
 log.maxDays = 3
 
-# --- 示例 1：穿透本地 SSH（22 → 远端 6022） ---
+# --- 示例 1：TCP，穿透本地 SSH（22 → 远端 6000） ---
 [[proxies]]
 name = "ssh"
 type = "tcp"
 localIP = "127.0.0.1"
 localPort = 22
-remotePort = 6022
-# 注意：使用 remotePort 必须在 fly.toml 中新增对应 [[services]] 块开放该端口
+remotePort = 6000
+# 连接：ssh -p 6000 用户名@your-app-name.fly.dev
 
-# --- 示例 2：穿透本地 Web 服务（如本地 3000 端口的开发站） ---
-# [[proxies]]
-# name = "web-dev"
-# type = "tcp"
-# localIP = "127.0.0.1"
-# localPort = 3000
-# remotePort = 6300
-# 然后通过 http://your-app-name.fly.dev:6300 访问
+# --- 示例 2：TCP，穿透本地 Web 开发站（3000 → 远端 6001） ---
+[[proxies]]
+name = "web-dev-tcp"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 3000
+remotePort = 6001
+# 访问：http://your-app-name.fly.dev:6001
 
-# --- 示例 3：穿透 RDP (Windows 远程桌面，3389 → 远端 6389) ---
+# --- 示例 3：TCP，穿透 Windows 远程桌面（3389 → 远端 6002） ---
 # [[proxies]]
 # name = "rdp"
 # type = "tcp"
 # localIP = "127.0.0.1"
 # localPort = 3389
-# remotePort = 6389
+# remotePort = 6002
+
+# --- 示例 4：HTTP，走 vhost 端口 8080（按域名路由，可多站点共用一个端口） ---
+# 前提：dev.your-domain.com 解析到你的 fly 应用（CNAME 到 your-app-name.fly.dev）
+# [[proxies]]
+# name = "web-dev-http"
+# type = "http"
+# localIP = "127.0.0.1"
+# localPort = 3000
+# customDomains = ["dev.your-domain.com"]
+# 访问：http://dev.your-domain.com:8080
+
+# --- 示例 5：HTTP，直接用裸 TCP 端口 8081（不需要配域名） ---
+[[proxies]]
+name = "web-dev-8081"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8080
+remotePort = 8081
+# 访问：http://your-app-name.fly.dev:8081
+
+# --- 示例 6：HTTPS，走 vhost 端口 8443（frps 按 SNI 透传，不解密） ---
+# [[proxies]]
+# name = "web-https"
+# type = "https"
+# localIP = "127.0.0.1"
+# localPort = 443
+# customDomains = ["dev.your-domain.com"]
+# 访问：https://dev.your-domain.com:8443
+
+# --- 示例 7：HTTPS，直接用裸 TCP 端口 8444 ---
+# [[proxies]]
+# name = "web-https-8444"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 443
+# remotePort = 8444
+# 访问：https://your-app-name.fly.dev:8444

@@ -1,0 +1,33 @@
+# frps-udp.toml 模板 —— UDP 专用实例
+#
+# 为什么要有第二个实例：
+#   fly.io 上 UDP 必须绑定 fly-global-services（否则回包源地址不对，收不到响应），
+#   而 TCP 必须绑 0.0.0.0；frps 的 proxyBindAddr 只有一个，同时管 TCP 和 UDP 代理，
+#   所以 UDP 必须单独起一个 frps 实例，客户端用 7001 端口连它。
+#
+# 启动前需要：fly ips allocate-v4（UDP 不支持共享 IPv4 / IPv6，必须有独立 IPv4）
+
+bindAddr = "0.0.0.0"
+bindPort = 7001
+
+# fly.io UDP 硬性要求
+proxyBindAddr = "fly-global-services"
+
+# --- 认证（与主实例用同一个 token）---
+auth.method = "token"
+auth.token = "${FRP_AUTH_TOKEN}"
+
+# --- 端口白名单：只放行 UDP 段 ---
+allowPorts = [
+  { start = 6100, end = 6104 },
+]
+
+# 本实例不开仪表盘（端口留给主实例，避免冲突）
+# 如需查看 UDP 实例状态：fly ssh console 里看日志，或把下面两行打开后加对应 services
+# webServer.addr = "0.0.0.0"
+# webServer.port = 7501
+
+# --- 日志 ---
+log.to = "console"
+log.level = "info"
+log.maxDays = 3

@@ -18,12 +18,20 @@ RUN apk add --no-cache ca-certificates gettext libintl tini && \
 
 COPY --from=builder /out/bin/frps /usr/local/bin/frps
 COPY frps.toml     /etc/frp/frps.toml.tmpl
+COPY frps-udp.toml /etc/frp/frps-udp.toml.tmpl
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && chown -R frp:frp /etc/frp
 
 USER frp
 WORKDIR /app
 
-EXPOSE 7000 7500
+# 控制端口 + 仪表盘
+EXPOSE 7000 7001 7500
+# TCP 穿透端口 6000-6004
+EXPOSE 6000-6004
+# UDP 穿透端口 6100-6104
+EXPOSE 6100-6104/udp
+# HTTP 穿透端口 8080-8084 / HTTPS 穿透端口 8443-8447
+EXPOSE 8080-8084 8443-8447
 
 ENTRYPOINT ["/sbin/tini", "--", "/entrypoint.sh"]

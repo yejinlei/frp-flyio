@@ -1,0 +1,9 @@
+# 容器内由 /bin/sh 执行的脚本必须是 LF，CRLF 会让 busybox sh 报 "\r" 错误、容器起不来
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.toml      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+
+# Windows 脚本用 CRLF 无副作用
+*.ps1       text eol=crlf

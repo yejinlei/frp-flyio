@@ -1,8 +1,12 @@
-# frps.toml 模板 —— 启动时由 entrypoint.sh 通过 envsubst 注入环境变量
+# frps.toml 模板 —— 主实例（TCP / HTTP / HTTPS）
+# 启动时由 entrypoint.sh 通过 envsubst 注入环境变量
 # 不要把真实密码写在这里；通过 fly secrets set 注入。
 
 bindAddr = "0.0.0.0"
 bindPort = 7000
+
+# 代理监听地址。fly.io 上 TCP 必须绑 0.0.0.0（不能绑 fly-global-services）
+proxyBindAddr = "0.0.0.0"
 
 # --- 认证 ---
 auth.method = "token"
@@ -14,11 +18,20 @@ webServer.port = 7500
 webServer.user = "${FRP_DASHBOARD_USER}"
 webServer.password = "${FRP_DASHBOARD_PWD}"
 
+# --- HTTP / HTTPS 虚拟主机端口 ---
+# frpc 里 type = "http" 走 vhostHTTPPort，type = "https" 走 vhostHTTPSPort，
+# frps 各只支持一个 vhost 端口，所以 8081-8084 / 8444-8447 用 type = "tcp" 承载。
+vhostHTTPPort = 8080
+vhostHTTPSPort = 8443
+
+# --- 端口白名单：只允许客户端占用下面这些端口 ---
+allowPorts = [
+  { start = 6000, end = 6004 },   # TCP 穿透 6000-6004
+  { start = 8081, end = 8084 },   # HTTP 穿透（8080 已被 vhost 占用）
+  { start = 8444, end = 8447 },   # HTTPS 穿透（8443 已被 vhost 占用）
+]
+
 # --- 日志 ---
 log.to = "console"
 log.level = "info"
 log.maxDays = 3
-
-# 如需 HTTP/HTTPS 穿透，取消注释并在 fly.toml 中开放对应端口
-# vhostHTTPPort = 8080
-# vhostHTTPSPort = 8443

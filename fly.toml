@@ -1,34 +1,48 @@
-# fly.toml —— frps 部署配置
-# 初始化时 fly launch 会把 app 字段改成你自己的应用名
+# fly.toml app configuration file generated for frp-tidy-coral-6267 on 2026-10-04T14:26:35+08:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+# 端口规划（每组 5 个连续端口，外部端口 = 容器内部端口，frps 直接监听同名端口）：
+#   TCP   穿透 6000-6004  → frpc type = "tcp",   remotePort = 6000..6004
+#   UDP   穿透 6100-6104  → frpc type = "udp",   remotePort = 6100..6104（需独立 IPv4）
+#   HTTP  穿透 8080-8084  → 8080 = vhostHTTPPort（type="http"，按域名路由）
+#                           8081-8084 = 裸 TCP（type="tcp"，http://域名:8081）
+#   HTTPS 穿透 8443-8447  → 8443 = vhostHTTPSPort（type="https"，按域名路由）
+#                           8444-8447 = 裸 TCP（type="tcp"，https://域名:8444）
+#   控制端口 7000 = 主实例（tcp/http/https），7001 = UDP 实例
+#
+# ⚠️ UDP 需要独立 IPv4（共享 IPv4 / IPv6 不支持 UDP）：fly ips allocate-v4
 
-app = "frp"          # 首次 fly launch 时会提示修改，可随便改
-primary_region = "sin"     # 可选：nrt(东京) / sin(新加坡) / hkg(香港) / sjc(圣何塞) / iad(华盛顿)
+app = 'frp-tidy-coral-6267'
+primary_region = 'sin'
 
 [build]
-
 [env]
-  # 这里可放非敏感默认值；密钥一定用 fly secrets set 设置
-  FRP_DASHBOARD_USER = "admin"
+  FRP_DASHBOARD_USER = 'admin'
 
+# 80/443 → frps 仪表盘（webServer.port = 7500）
 [http_service]
   internal_port = 7500
   force_https = true
-  auto_stop_machines = false
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
 
   [[http_service.checks]]
-    grace_period = "10s"
-    interval = "30s"
-    method = "GET"
-    timeout = "5s"
-    path = "/static/"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    # frps 仪表盘唯一免鉴权的健康检查端点；/static/ 需要登录，会让机器永远 unhealthy
+    path = '/healthz'
 
-# --- frp 控制端口 7000 (TCP) ---
+# ============================ 控制端口 ============================
+
+# frps 主实例（TCP / HTTP / HTTPS 代理）
 [[services]]
-  protocol = "tcp"
+  protocol = 'tcp'
   internal_port = 7000
-  auto_stop_machines = false
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
 
@@ -36,21 +50,176 @@ primary_region = "sin"     # 可选：nrt(东京) / sin(新加坡) / hkg(香港)
     port = 7000
 
   [[services.tcp_checks]]
-    grace_period = "10s"
-    interval = "30s"
-    timeout = "5s"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
 
-# --- frp 客户端代理端口示例：SSH 穿透 (TCP 6022) ---
-# 需要新端口时，复制下面这段改 remotePort 数字，再 fly deploy
-# [[services]]
-#   protocol = "tcp"
-#   internal_port = 6022
-#   auto_stop_machines = false
-#
-#   [[services.ports]]
-#     port = 6022
-#
-#   [[services.tcp_checks]]
-#     grace_period = "10s"
-#     interval = "30s"
-#     timeout = "5s"
+# frps UDP 实例（UDP 专用，代理绑 fly-global-services）
+[[services]]
+  protocol = 'tcp'
+  internal_port = 7001
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 7001
+
+  [[services.tcp_checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+
+# ============================ TCP 穿透 6000-6004 ============================
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6000
+
+  [[services.ports]]
+    port = 6000
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6001
+
+  [[services.ports]]
+    port = 6001
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6002
+
+  [[services.ports]]
+    port = 6002
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6003
+
+  [[services.ports]]
+    port = 6003
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6004
+
+  [[services.ports]]
+    port = 6004
+
+# ============================ UDP 穿透 6100-6104 ============================
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6100
+
+  [[services.ports]]
+    port = 6100
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6101
+
+  [[services.ports]]
+    port = 6101
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6102
+
+  [[services.ports]]
+    port = 6102
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6103
+
+  [[services.ports]]
+    port = 6103
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 6104
+
+  [[services.ports]]
+    port = 6104
+
+# ============================ HTTP 穿透 8080-8084 ============================
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8080
+
+  [[services.ports]]
+    port = 8080
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8081
+
+  [[services.ports]]
+    port = 8081
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8082
+
+  [[services.ports]]
+    port = 8082
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8083
+
+  [[services.ports]]
+    port = 8083
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8084
+
+  [[services.ports]]
+    port = 8084
+
+# ============================ HTTPS 穿透 8443-8447 ============================
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8443
+
+  [[services.ports]]
+    port = 8443
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8444
+
+  [[services.ports]]
+    port = 8444
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8445
+
+  [[services.ports]]
+    port = 8445
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8446
+
+  [[services.ports]]
+    port = 8446
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8447
+
+  [[services.ports]]
+    port = 8447
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 256

@@ -1,0 +1,37 @@
+# frpc-udp-example.toml —— UDP 穿透专用的客户端配置
+# 复制为 frpc-udp.toml，和 frpc.toml 一起运行：./frpc -c frpc-udp.toml
+#
+# 为什么 UDP 要单独一个配置文件：
+#   fly.io 上 UDP 必须绑 fly-global-services、TCP 必须绑 0.0.0.0，
+#   服务端的 UDP 是另一个 frps 实例（控制端口 7001），
+#   而 frpc 的 serverPort 是一个配置文件只能填一个，所以 UDP 单独起一个 frpc 进程。
+
+serverAddr = "your-app-name.fly.dev"   # 同 frpc.toml
+serverPort = 7001                      # ← 注意：UDP 实例的控制端口
+
+auth.method = "token"
+auth.token = "与服务端 FRP_AUTH_TOKEN 相同的值"
+
+log.to = "./frpc-udp.log"
+log.level = "info"
+log.maxDays = 3
+
+# --- 示例 1：UDP，转发本地 DNS 查询（53 → 远端 6100） ---
+[[proxies]]
+name = "dns"
+type = "udp"
+localIP = "127.0.0.1"
+localPort = 53
+remotePort = 6100
+# 测试：dig @your-app-name.fly.dev -p 6100 example.com
+
+# --- 示例 2：UDP，游戏 / 语音等（本地 19132 → 远端 6101） ---
+# [[proxies]]
+# name = "game-udp"
+# type = "udp"
+# localIP = "127.0.0.1"
+# localPort = 19132
+# remotePort = 6101
+
+# 注意：fly.io 会吃掉约 70+ 字节做隧道封装，UDP 单包尽量控制在 1300 字节以内，
+# 否则会分片；WireGuard / 游戏服务器必要时调小本端 MTU。
