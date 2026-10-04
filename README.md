@@ -26,7 +26,7 @@ frp-flyio/
 
 | 脚本 | 作用 |
 | :--- | :--- |
-| `deploy.ps1` | 一键发布：查 flyctl → 查登录 → 建应用 → 补齐密钥 → 查 UDP 所需的独立 IPv4 → `fly deploy` → 看状态 |
+| `deploy.ps1` | 一键发布：查 flyctl → 查登录 → 建应用 → 补齐密钥 → 查必需的独立 IPv4 → `fly deploy` → 看状态 |
 | `add-port.ps1` | 映射端口：给 `fly.toml` 加 `[[services]]` 块 + 给 `frps*.toml` 的 `allowPorts` 加白名单，可 `-Deploy` 直接上线 |
 
 ```powershell
@@ -301,17 +301,43 @@ fly secrets set FRP_DASHBOARD_PWD="YourStrongPassword123!"
 
 > 这些密钥不会进入代码仓库、不会显示在日志中，由 fly.io 加密存储、启动时注入容器。
 
-### 4. 申请独立 IPv4（UDP 必需）
-
-fly.io 上 **UDP 只支持独立 IPv4**，共享 IPv4 和 IPv6 都不行（TCP 两种都行）：
+### 4. 申请独立 IPv4（**必需，不只是因为 UDP**）
 
 ```bash
-fly ips allocate-v4        # 独立 IPv4，约 $2/月
-fly ips list               # 确认已分配
+fly ips allocate-v4 -a <应用名>     # 独立 IPv4，约 $2/月
+fly ips allocate-v6 -a <应用名>     # IPv6，免费，可选
+fly ips list -a <应用名>            # 确认已分配
 ```
 
-> 只用 TCP/HTTP/HTTPS、不用 UDP 的话可以跳过这步，
-> 也可以把 `fly.toml` 里的 5 个 UDP `[[services]]` 块删掉。
+#### ⚠️ 为什么非4不可
+
+fly.io 官方文档（Public Network Services）对**共享 IPv4** 的限制是:
+
+> - Dedicated IPv4 适用于：app 使用**不带 TLS 的非 HTTP 协议**；
+>   app 需要在 **UDP** 上做点什么（**不支持 UDP over 共享 IPv4 或 IPv6**）。
+> - 共享 IPv4 要在 80/443 以外的 TCP 端口上使用，**必须给该端口配 TLS handler**。
+
+对本项目来说这是**两条独立理由**，缺一不可：
+
+| 需求 | 共享 IPv4 能否满足 | 说明 |
+| :-- | :-- | :-- |
+| frps 控制端口 `7000` / `7001` | ❌ | 跑的是 frp 自己的二进制协议，非 HTTP 非 TLS |
+| TCP 穿透 `6000-6019`、TCPMUX `8333` | ❌ | 同上，且不是 80/443 |
+| HTTP vhost `8080`、HTTPS vhost `8443` | ❌ | 自定义端口，共享 IPv4 不认 |
+| UDP 穿透 `6100-6119` | ❌ | 共享 IPv4 与 IPv6 都不支持 UDP |
+| 仪表盘 `https://应用名.fly.dev` | ✅ | 走 80/443 的 http_service，共享 IP 就够了 |
+
+> 想靠「给端口加 `handlers = ["tls"]`」绕过也不行：那要求**客户端先做 TLS 握手**，
+> 而 frpc 的 `transport.tls.enable` 是 frp 协议内部的 TLS，会被 fly 边缘先拆掉，两端对不上。
+
+**结论：释放独立 IPv4 = 整套穿透报废（只剩仪表盘能看），不要为了省这 $2/月去释放。**
+
+#### 其他注意
+
+- 释放后再 `fly ips allocate-v4`，**拿到的通常是新 IP**。所以客户端 `serverAddr` 一律写
+  `应用名.fly.dev`，不要硬编码 IP。
+- IPv6 免费且支持 TCP（不支持 UDP），推荐一并申请，IPv6-only 网络（部分手机流量）也能连。
+- 只要保留 `[http_service]`（80/443），app 会自动获得免费的共享 IPv4，它与独立 IPv4 共存互不干扰。
 
 ### 5. 部署
 
