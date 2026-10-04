@@ -51,6 +51,168 @@ frp-flyio/
 > 导致 `fly deploy` / `fly secrets set` 一直卡在 `Waiting for ... to become healthy`。
 > 密钥用 `fly secrets set --stage` 只暂存不重启，避免旧机器健康不过时卡死。
 
+## 🧭 frp 协议与工作原理
+
+frp 只有两个角色：**frps**（有公网 IP，负责转发）和 **frpc**（跑在内网，负责把本地服务「注册」出去）。
+frpc 启动后先和 frps 建立一条**控制连接**（本项目是 `7000` / `7001`），所有后续的用户流量都被塞进这条连接里复用。
+
+按**用户流量最终流向**区分，frp 的代理类型可以归成三类：
+
+| 类别 | 流量路径 | 是否占服务端公网端口 | 典型类型 |
+| :-- | :-- | :-- | :-- |
+| 标准中转 | 用户 → frps → frpc → 本地服务 | 占（`remotePort` 或 vhost） | `tcp` / `udp` / `http` / `https` / `tcpmux` |
+| 安全私密 | 用户（visitor）→ frps → frpc → 本地服务，**且要 secretKey 配对** | 不占 | `stcp` / `sudp` |
+| P2P 直连 | 协商走 frps，**数据直连不经过服务器** | 不占 | `xtcp` |
+
+> 简单记：**要不要经过服务器**看是不是 XTCP；**要不要在公网留端口**看是不是 STCP/SUDP/XTCP。
+> 本项目各协议对应的实际端口，见下一章「端口规划」。
+
+### 1. 数据流向总览
+
+```mermaid
+graph TD
+    %% 定义样式
+    classDef public fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef private fill:#f3e5f5,stroke:#4a148c,stroke-width:2px;
+    classDef p2p fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,stroke-dasharray: 5 5;
+    classDef user fill:#fff9c4,stroke:#fbc02d,stroke-width:2px;
+    classDef frps fill:#ffebee,stroke:#b71c1c,stroke-width:4px;
+    classDef frpc fill:#e0f2f1,stroke:#004d40,stroke-width:2px;
+    classDef local fill:#fafafa,stroke:#333,stroke-width:1px;
+
+    subgraph Internet ["🌐 公网区域"]
+        User[("👤 外部用户")]:::user
+        FRPS(("🚀 FRP 服务端<br/>frps")):::frps
+    end
+
+    subgraph Intranet ["🏠 内网区域"]
+        FRPC(("📡 FRP 客户端<br/>frpc")):::frpc
+
+        subgraph Services ["💻 本地服务集群"]
+            SSH[("🔒 SSH / RDP<br/>TCP协议")]:::local
+            Web[("🌐 Website / API<br/>HTTP/HTTPS/WSS")]:::local
+            Game[("🎮 Game / VoIP<br/>UDP协议")]:::local
+            DB[("🗄️ 内部数据库<br/>STCP协议")]:::local
+            P2P_Node[("📂 大文件节点<br/>XTCP协议")]:::local
+        end
+    end
+
+    %% 连接关系 - 体现不同协议的作用
+
+    %% 1. TCP/UDP/HTTP: 标准中转模式
+    User -->|1. 访问公网IP:Port| FRPS
+    FRPS ==>|2. 隧道转发 TCP/UDP/HTTP| FRPC
+    FRPC -->|3. 本地转发| SSH
+    FRPC -->|3. 本地转发| Web
+    FRPC -->|3. 本地转发| Game
+
+    %% 标注协议特性
+    linkStyle 1 stroke:#2196f3,stroke-width:2px;
+    note1["🔵 标准穿透: 流量经 frps 中转<br/>适用于: SSH, Web, 游戏"] -.-> FRPS
+
+    %% 2. STCP: 安全私密模式 (不暴露公网端口)
+    User_STCP[("👤 授权访客")]:::user
+    User_STCP -->|1. 绑定 sk 密钥| FRPS
+    FRPS ==>|2. 鉴权后转发| FRPC
+    FRPC -->|3. 访问| DB
+    linkStyle 6,7,8 stroke:#9c27b0,stroke-width:2px;
+    note2["🟣 安全穿透 STCP: 无公网端口暴露<br/>需双方配置 sk 密钥"] -.-> FRPS
+
+    %% 3. XTCP: P2P 直连模式 (零带宽消耗)
+    User_P2P[("👤 P2P 访客")]:::user
+    User_P2P -.->|1. 打洞协商| FRPS
+    FRPS -.->|2. 交换地址| FRPC
+    User_P2P ==>|3. P2P 直连传输| P2P_Node
+    linkStyle 11,12 stroke:#4caf50,stroke-width:3px,stroke-dasharray: 5 5;
+    note3["🟢 P2P 穿透 XTCP: 流量不经过 frps<br/>适用于: 大文件传输, 视频流"] -.-> User_P2P
+
+    %% 4. WebSocket: 特殊通道
+    WS_User[("👤 受限网络用户")]:::user
+    WS_User -->|1. HTTP Upgrade| FRPS
+    FRPS ==>|2. WS 隧道| FRPC
+    FRPC -->|3. 转发| Web
+    linkStyle 16 stroke:#ff9800,stroke-width:2px;
+    note4["🟠 WebSocket: 伪装成 HTTP 流量<br/>适用于: 严格防火墙/DPI 环境"] -.-> FRPS
+
+    %% 应用样式类
+    class User,User_STCP,User_P2P,WS_User user;
+    class FRPS frps;
+    class FRPC frpc;
+    class SSH,Web,Game,DB,P2P_Node local;
+```
+
+> 图中没有画出的还有两类本项目已支持的能力：
+> **TCPMUX**（`8333`，HTTP CONNECT 多路复用，按域名路由、不占 `remotePort`）和
+> **socks5 插件**（frpc 本地起代理，服务端只看到一个普通 `tcp` 端口）。
+
+### 2. 协议选型脑图
+
+```mermaid
+mindmap
+  root((FRP 协议选型))
+    标准中转类<br/>(流量经过 frps)
+      TCP
+        ::icon(fa fa-plug)
+        通用性强
+        适合: SSH, 远程桌面, 数据库
+      UDP
+        ::icon(fa fa-bolt)
+        低延迟
+        适合: 游戏服, 视频会议, DNS
+      HTTP/HTTPS
+        ::icon(fa fa-globe)
+        域名路由
+        适合: 网站, API 服务
+      WebSocket
+        ::icon(fa fa-exchange)
+        穿透严格防火墙
+        适合: 家宽, 海外高延迟网络
+    安全私密类<br/>(不暴露公网端口)
+      STCP
+        ::icon(fa fa-lock)
+        需共享密钥 sk
+        适合: 内部敏感服务, 仅限好友访问
+      SUDP
+        ::icon(fa fa-shield)
+        UDP版 STCP
+        适合: 私密语音/游戏联机
+    P2P 直连类<br/>(流量不经过 frps)
+      XTCP
+        ::icon(fa fa-arrows-alt)
+        打洞直连
+        节省服务器带宽
+        适合: 大文件传输, 高清视频流
+        注意: 成功率受 NAT 类型影响
+```
+
+### 3. WebSocket 模式下的报文封装
+
+```mermaid
+packet-beta
+title "WebSocket 模式下 FRP 数据封装结构"
+0-15: "Source Port"
+16-31: "Dest Port (80/443)"
+32-63: "Sequence Number"
+64-95: "Acknowledgment Number"
+96-99: "Data Offset"
+100-105: "Reserved"
+106-111: "Flags (SYN/ACK/PSH)"
+112-127: "Window Size"
+128-143: "Checksum"
+144-159: "Urgent Pointer"
+160-191: "HTTP Header (Upgrade: websocket)"
+192-223: "WebSocket Frame Header"
+224-255: "FRP Control/Data Payload"
+256-287: "Actual User Data (SSH/HTTP/etc)"
+```
+
+> 本项目未开启 WebSocket 传输模式（`transport.useEncryption` / `websocket` 相关配置留默认），
+> 上面这张图用于理解「再套一层 WebSocket 封装后，单个数据包要多出哪些开销」：
+> 每包额外约 20（IP 头）+ 20（TCP 头）+ WebSocket 帧头 2~14 字节，
+> **UDP 场景下务必把载荷控制在 1300 字节以内**，否则经 fly.io 隧道会分片导致丢包。
+
+> 具体要怎么用：见 [使用场景与配置案例.md](./使用场景与配置案例.md)。
+
 ## 🔢 端口规划
 
 服务端开放 **4 组 × 20 个连续端口**（外部端口 = 容器内部端口，frps 直接监听同名端口）：
