@@ -14,6 +14,7 @@ frp-flyio/
 ├── fly.toml               # fly.io 平台部署配置（端口、区域、健康检查）
 ├── frpc-example.toml      # 本地客户端配置示例（TCPMUX/TCP/HTTP/HTTPS/STCP/SUDP/XTCP，连 7000）
 ├── frpc-udp-example.toml  # 本地客户端 UDP 配置示例（连 7001）
+├── 使用场景与配置案例.md   # 各协议的使用场景 + 可直接复制的 frpc 配置案例
 ├── deploy.ps1             # Windows 一键发布脚本
 ├── add-port.ps1           # Windows 端口映射脚本（改 fly.toml + allowPorts）
 ├── .dockerignore
@@ -196,6 +197,31 @@ https://你的应用名.fly.dev
 
 用你设置的用户名/密码登录（默认用户名 `admin`，密码为 `FRP_DASHBOARD_PWD`）。
 可以看到当前连接的客户端和每个代理的流量情况。
+
+## 🎯 使用场景与配置案例
+
+想知道「我要干 X，该用哪个协议、frpc 怎么写」，看这份：
+
+**→ [使用场景与配置案例.md](./使用场景与配置案例.md)**
+
+里面按场景（SSH/远程桌面、NAS、多站点、数据库、游戏与 WireGuard、P2P、socks5、摄像头等）
+给出可直接复制的 frpc 配置，含 Windows `frpc.ini` 的字段对照。
+
+这里是十秒速查表：
+
+| 你的需求 | 用这个 | 对外端口 |
+| :--- | :--- | :--- |
+| 长期 SSH / RDP / 单端口服务 | `tcp` | 占 1 个 `6000-6019` |
+| 有域名、多站点共用 | `http` / `https` | 共用 `8080` / `8443` |
+| 端口紧、要 HTTP CONNECT 代理 | `tcpmux` | 共用 `8333` |
+| 游戏 / 语音 / WireGuard / DNS | `udp` | 占 1 个 `6100-6119`（连 7001） |
+| 数据库、后台、只给同事访问 | `stcp` / `sudp` | **不占** |
+| 大流量、要低延迟（P2P） | `xtcp`（务必配 STCP 兜底） | **不占** |
+| 一个端口代理所有流量 | `tcp` + socks5 插件 | 占 1 个 |
+| 摄像头、打印机等弱鉴权设备 | `stcp`（别裸放公网） | **不占** |
+
+> 两条经验：**能用 STCP 就别用 TCP**（STCP 在公网上不留端口）；**XTCP 必须配 `fallbackTo`**，
+> 否则打洞失败就是彻底连不上。
 
 ## 💻 客户端配置 (frpc)
 
