@@ -1,8 +1,8 @@
 # fly.toml —— frps 部署配置
 # 初始化时 fly launch 会把 app 字段改成你自己的应用名
 
-app = "frp-flyio"          # 首次 fly launch 时会提示修改，可随便改
-primary_region = "hkg"     # 可选：nrt(东京) / sin(新加坡) / hkg(香港) / sjc(圣何塞) / iad(华盛顿)
+app = "frp"          # 首次 fly launch 时会提示修改，可随便改
+primary_region = "sin"     # 可选：nrt(东京) / sin(新加坡) / hkg(香港) / sjc(圣何塞) / iad(华盛顿)
 
 [build]
 
