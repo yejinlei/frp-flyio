@@ -12,7 +12,7 @@ frp-flyio/
 ├── frps.toml              # 主实例配置模板（TCP/HTTP/HTTPS，含 ${...} 占位符）
 ├── frps-udp.toml          # UDP 实例配置模板（绑 fly-global-services）
 ├── fly.toml               # fly.io 平台部署配置（端口、区域、健康检查）
-├── frpc-example.toml      # 本地客户端配置示例（TCP/HTTP/HTTPS，连 7000）
+├── frpc-example.toml      # 本地客户端配置示例（TCPMUX/TCP/HTTP/HTTPS/STCP/SUDP，连 7000）
 ├── frpc-udp-example.toml  # 本地客户端 UDP 配置示例（连 7001）
 ├── deploy.ps1             # Windows 一键发布脚本
 ├── add-port.ps1           # Windows 端口映射脚本（改 fly.toml + allowPorts）
@@ -60,8 +60,13 @@ frp-flyio/
 | UDP | `6100-6104` | `type = "udp"`，`remotePort = 6100..6104`（连 7001 实例） | `域名:6100` |
 | HTTP | `8080-8084` | `8080`：`type = "http"` + `customDomains`（按域名路由）<br>`8081-8084`：`type = "tcp"` | `http://域名:8080` |
 | HTTPS | `8443-8447` | `8443`：`type = "https"` + `customDomains`（按域名路由）<br>`8444-8447`：`type = "tcp"` | `https://域名:8443` |
+| TCPMUX | `8333` | `type = "tcpmux"` + `multiplexer = "httpconnect"`（按域名路由） | `curl -x http://域名:8333 https://目标` |
+| STCP / SUDP | 无公网端口 | `type = "stcp"` / `"sudp"` + `secretKey`，访问方配 `[[visitors]]` | 本地 `127.0.0.1:visitor 端口` |
 
-控制端口：`7000` 主实例（TCP/HTTP/HTTPS）、`7001` UDP 实例，仪表盘在主实例 `7500`（经 `https://应用名.fly.dev` 访问）。
+控制端口：`7000` 主实例（TCP / HTTP / HTTPS / TCPMUX / STCP / SUDP）、`7001` UDP 实例，仪表盘在主实例 `7500`（经 `https://应用名.fly.dev` 访问）。
+
+> `8333` 是 frps 的 `tcpmuxHTTPConnectPort`，像 vhost 一样按域名路由，**不占 `remotePort`**，不受 `allowPorts` 限制。
+> STCP / SUDP 走的是 frpc 已建立的控制连接（7000），**服务端不需要任何额外端口**，改客户端配置即可用。
 
 > frps 的 vhost 端口各只能有一个（`vhostHTTPPort` / `vhostHTTPSPort`），
 > 所以每组第 1 个端口给 vhost 做域名路由，其余 4 个作为裸 TCP 端口用 `type = "tcp"` 承载 HTTP/HTTPS 流量。
@@ -73,7 +78,7 @@ frp-flyio/
 | 项目 | 结果 |
 | :--- | :--- |
 | 应用 / 区域 | `frp-tidy-coral-6267` / `sin`，共享 CPU 1x、256MB |
-| TCP 端口（22 个） | `7000`、`7001`、`6000-6004`、`8080-8084`、`8443-8447` 全部可连 |
+| TCP 端口（22 个） | `7000`、`7001`、`6000-6004`、`8080-8084`、`8443-8447` 全部可连（本次新增的 `8333` 待下次 `fly deploy` 后复测） |
 | `https://域名/healthz` | `200` → 机器 healthy，健康检查通过 |
 | `https://域名/` | `401` → 仪表盘鉴权生效 |
 | `http://域名:8080/` | `404` → frps 的 vhost 路由在响应，确认跑的是新镜像 |
@@ -208,6 +213,57 @@ cp frpc-udp-example.toml frpc-udp.toml   # 改 serverAddr / auth.token
 ./frpc -c frpc-udp.toml
 ```
 
+### TCPMUX 穿透（共用 8333 一个端口）
+
+`frps.toml` 已开 `tcpmuxHTTPConnectPort = 8333`。与 HTTP vhost 类似按域名路由，
+因此**多个 tcpmux 代理可以共用一个 8333 端口**，也不占用 `remotePort`：
+
+```toml
+[[proxies]]
+name = "tcpmux-dev"
+type = "tcpmux"
+multiplexer = "httpconnect"
+localIP = "127.0.0.1"
+localPort = 3000
+customDomains = ["dev.your-domain.com"]   # 需解析到你的 fly 应用
+```
+
+使用时把 8333 当 HTTP CONNECT 代理即可：
+
+```bash
+curl -x http://dev.your-domain.com:8333 https://example.com/
+```
+
+### STCP / SUDP（不需要服务端开端口）
+
+适合 SSH、数据库这类只让指定人访问的服务：公网上不留任何端口，
+流量走 frpc 已建立的控制连接（7000），靠 `secretKey` 鉴权。
+
+内网机（被访问方）：
+
+```toml
+[[proxies]]
+name = "secret-ssh"
+type = "stcp"               # SUDP 用 "sudp"
+secretKey = "换成一串够长的随机串"
+localIP = "127.0.0.1"
+localPort = 22
+```
+
+访问方再起一个 frpc（配 `[[visitors]]`）：
+
+```toml
+[[visitors]]
+name = "secret-ssh-visitor"
+type = "stcp"
+serverName = "secret-ssh"
+secretKey = "同上"
+bindAddr = "127.0.0.1"
+bindPort = 6000             # 本地端口，随便选
+```
+
+然后 `ssh -p 6000 用户名@127.0.0.1`。SUDP 同理，但注意两端 `udpPacketSize` 保持一致（默认 1500）。
+
 ### ⚠️ 新增端口必须做的事
 
 现在服务端只放行白名单端口（`frps.toml` / `frps-udp.toml` 里的 `allowPorts`）：
@@ -218,7 +274,8 @@ TCP `6000-6004`、UDP `6100-6104`、HTTP `8081-8084`、HTTPS `8444-8447`。
 2. `frps.toml`（或 `frps-udp.toml`）：把新端口加进 `allowPorts`；
 3. `fly deploy` 重新部署。
 
-> 注意 `8080` / `8443` 已被 vhost 占用，不能再当 `remotePort` 用。
+> 注意 `8080` / `8443` 已被 vhost 占用、`8333` 已被 tcpmux 占用，都不能再当 `remotePort` 用。
+> TCPMUX、STCP、SUDP 例外：它们不走 `allowPorts`，不需要加白名单。
 
 ## 🔧 常用运维命令
 

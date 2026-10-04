@@ -9,7 +9,9 @@
 #                           8081-8084 = 裸 TCP（type="tcp"，http://域名:8081）
 #   HTTPS 穿透 8443-8447  → 8443 = vhostHTTPSPort（type="https"，按域名路由）
 #                           8444-8447 = 裸 TCP（type="tcp"，https://域名:8444）
-#   控制端口 7000 = 主实例（tcp/http/https），7001 = UDP 实例
+#   TCPMUX 穿透 8333  → frpc type = "tcpmux", multiplexer = "httpconnect"，
+#                       按 customDomains 路由，不占 remotePort
+#   控制端口 7000 = 主实例（tcp/http/https/tcpmux/stcp/sudp），7001 = UDP 实例
 #
 # ⚠️ UDP 需要独立 IPv4（共享 IPv4 / IPv6 不支持 UDP）：fly ips allocate-v4
 
@@ -217,6 +219,16 @@ primary_region = 'sin'
 
   [[services.ports]]
     port = 8447
+
+# ============================ TCPMUX 穿透 8333 ============================
+
+# frps.toml 的 tcpmuxHTTPConnectPort = 8333，frpc 用 type = "tcpmux" + httpconnect
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8333
+
+  [[services.ports]]
+    port = 8333
 
 [[vm]]
   memory = '256mb'

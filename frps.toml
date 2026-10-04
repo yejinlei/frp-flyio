@@ -24,6 +24,12 @@ webServer.password = "${FRP_DASHBOARD_PWD}"
 vhostHTTPPort = 8080
 vhostHTTPSPort = 8443
 
+# --- TCPMUX：HTTP CONNECT 多路复用端口（默认 0 = 关闭）---
+# frpc 里 type = "tcpmux" + multiplexer = "httpconnect" 走这个端口，
+# 与 http/https 一样按域名路由：不占 remotePort，因此不受 allowPorts 限制。
+# 访问方式：把 8333 当 HTTP CONNECT 代理用，域名（customDomains）决定路由到哪个 frpc。
+tcpmuxHTTPConnectPort = 8333
+
 # --- 端口白名单：只允许客户端占用下面这些端口 ---
 allowPorts = [
   { start = 6000, end = 6004 },   # TCP 穿透 6000-6004

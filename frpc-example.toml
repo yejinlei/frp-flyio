@@ -5,7 +5,9 @@
 #   TCP   6000-6004   type = "tcp"
 #   HTTP  8080-8084   8080 用 type = "http"（按域名路由），8081-8084 用 type = "tcp"
 #   HTTPS 8443-8447   8443 用 type = "https"（按域名路由），8444-8447 用 type = "tcp"
-#   UDP   6100-6104   见 frpc-udp-example.toml（必须连 7001 端口的另一个 frps 实例）
+#   TCPMUX 8333    type = "tcpmux" + multiplexer = "httpconnect"（按域名路由）
+#
+# 另外不需要服务端改配置、纯客户端可用的：STCP / SUDP（配 visitor 即可）。
 
 serverAddr = "your-app-name.fly.dev"   # 改成你自己的 fly.io 域名
 serverPort = 7000
@@ -80,3 +82,36 @@ remotePort = 8081
 # localPort = 443
 # remotePort = 8444
 # 访问：https://your-app-name.fly.dev:8444
+
+# --- 示例 8：TCPMUX，走 tcpmuxHTTPConnectPort = 8333（HTTP CONNECT 多路复用）---
+# 与 http 一样按域名路由，不需要 remotePort；一台 frpc 可挂多个不同 customDomains 的 tcpmux 代理，
+# 共用 8333 一个端口。前提：dev.your-domain.com 解析到你的 fly 应用。
+# [[proxies]]
+# name = "tcpmux-dev"
+# type = "tcpmux"
+# multiplexer = "httpconnect"
+# localIP = "127.0.0.1"
+# localPort = 3000
+# customDomains = ["dev.your-domain.com"]
+# 使用：curl -x http://dev.your-domain.com:8333 https://任意目标/
+
+# --- 示例 9：STCP（安全 TCP，服务端不需要额外配置端口）---
+# 只有知道 secretKey 的 visitor 能访问，公网没有任何端口暴露。
+# 内网机（被访问方）加这段；访问方另起一个 frpc 写 [[visitors]]（见示例 10）。
+# [[proxies]]
+# name = "secret-ssh"
+# type = "stcp"
+# secretKey = "换成一串够长的随机串"
+# localIP = "127.0.0.1"
+# localPort = 22
+
+# --- 示例 10：访问方 frpc 的 visitor 配置（与示例 9 配对）---
+# type = "sudp" 时用法完全一样，只是访问下层的 UDP 服务。
+# [[visitors]]
+# name = "secret-ssh-visitor"
+# type = "stcp"          # SUDP 用 "sudp"
+# serverName = "secret-ssh"
+# secretKey = "与示例 9 相同"
+# bindAddr = "127.0.0.1"
+# bindPort = 6000        # 本地端口，随便选，不占用服务端端口
+# 连接：ssh -p 6000 用户名@127.0.0.1
