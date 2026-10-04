@@ -34,4 +34,6 @@ EXPOSE 6100-6104/udp
 # HTTP 穿透端口 8080-8084 / HTTPS 穿透端口 8443-8447
 EXPOSE 8080-8084 8443-8447
 
-ENTRYPOINT ["/sbin/tini", "--", "/entrypoint.sh"]
+# 用 tini 收僵尸进程；-g = 停止信号转发给整个进程组，
+# 保证后台 supervisor 循环里的 frps 也能收到 TERM（不会留下占端口的孤儿进程）
+ENTRYPOINT ["/sbin/tini", "-g", "--", "/entrypoint.sh"]
